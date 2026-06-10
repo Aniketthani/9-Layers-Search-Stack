@@ -1,0 +1,219 @@
+{
+  "Adverse loss history": [
+    "frequent falls",
+    "struck-by",
+    "major property damage",
+    "worker injury"
+  ],
+  "Aggressive drink promotions": [
+    "happy hour",
+    "drink specials",
+    "ladies night",
+    "all you can drink",
+    "$1 beers"
+  ],
+  "Amusement devices": [
+    "pinball",
+    "games",
+    "pool tables",
+    "darts",
+    "arcade games",
+    "shuffleboard",
+    "bowling"
+  ],
+  "BYOB operations": [
+    "BYOB",
+    "bring your own bottle",
+    "corkage"
+  ],
+  "College / nightlife district": [
+    "college bar",
+    "near campus",
+    "nightlife district"
+  ],
+  "Experience gaps": [
+    "new to trade",
+    "expanding into new work"
+  ],
+  "Financial strain": [
+    "thin balance sheet",
+    "bonding issues"
+  ],
+  "Habitational with outdated life-safety systems": [
+    "no sprinklers",
+    "no fire alarm",
+    "no smoke detectors",
+    "knob-and-tube wiring",
+    "Federal Pacific",
+    "Stab-Lok",
+    "Zinsco-Sylvania electric panels",
+    "aluminum wiring",
+    "no commercial kitchen hood fire suppression system",
+    "no regular hood cleaning",
+    "no regular duct cleaning",
+    "grease buildup"
+  ],
+  "Hazardous processes": [
+    "hot work",
+    "torch",
+    "welding",
+    "brazing"
+  ],
+  "Heavy liquor exposure": [
+    "full bar",
+    "high proof spirits",
+    "cocktail lounge",
+    "bar-heavy revenue",
+    "bottle service",
+    "set-ups"
+  ],
+  "High-crime mercantile": [
+    "late-night convenience",
+    "gas station",
+    "cash business",
+    "high-crime area",
+    "24 hour"
+  ],
+  "High-risk trades": [
+    "roofing",
+    "demolition",
+    "structural steel",
+    "tree removal",
+    "landscaping",
+    "swimming pool",
+    "plumbing",
+    "remodel",
+    "use of cranes",
+    "use of scaffolding",
+    "snow treatment",
+    "ice treatment",
+    "snow removal",
+    "ice removal"
+  ],
+  "Inconsistent PPE use": [
+    "PPE optional",
+    "inconsistent harness use"
+  ],
+  "Labor misclassification": [
+    "1099 only",
+    "1099 employees",
+    "cash labor",
+    "ghost payroll"
+  ],
+  "Late-night bars / nightclubs": [
+    "open after midnight",
+    "open after 2am",
+    "late hours",
+    "after hours"
+  ],
+  "Limited liquor controls": [
+    "no TIPS",
+    "no alcohol training",
+    "informal training"
+  ],
+  "Live entertainment / dancing": [
+    "DJ",
+    "live band",
+    "dance floor",
+    "karaoke",
+    "live music",
+    "solo-musician"
+  ],
+  "New venture bars": [
+    "new ownership",
+    "newly opened",
+    "startup bar"
+  ],
+  "No safety program": [
+    "no safety manual",
+    "informal safety",
+    "no OSHA training",
+    "no OSHA certifications"
+  ],
+  "Outdated documentation": [
+    "old safety manual",
+    "missing logs",
+    "no safety program",
+    "OSHA violations",
+    "license in process"
+  ],
+  "Poor property condition": [
+    "deferred maintenance",
+    "poor condition",
+    "outdated",
+    "below-average",
+    "lack of lighting",
+    "uncovered exterior stairwells",
+    "uneven sidewalks"
+  ],
+  "Poor security controls": [
+    "bouncers",
+    "no ID scanner",
+    "lax security",
+    "untrained door staff",
+    "no surveillance",
+    "door person"
+  ],
+  "Prior liquor violations": [
+    "fines",
+    "violations",
+    "suspension",
+    "revoked license",
+    "license issues"
+  ],
+  "Prior violence losses": [
+    "assault",
+    "battery",
+    "fight",
+    "shooting",
+    "fatality"
+  ],
+  "Residential new construction": [
+    "new homes",
+    "condos",
+    "ground-up construction",
+    "custom homes",
+    "semi-custom homes"
+  ],
+  "Special hazard venues": [
+    "gun range",
+    "pyrotechnics",
+    "cannabis"
+  ],
+  "Structural & maintenance issues": [
+    "foundation settling",
+    "bulging walls",
+    "leaning walls",
+    "sagging floors",
+    "spalling",
+    "water intrusion",
+    "leaks",
+    "mold/rot",
+    "no major rehab",
+    "grandfathered systems",
+    "cracking"
+  ],
+  "Submission inconsistencies": [
+    "website vs app mismatch",
+    "conflicting answers"
+  ],
+  "Uninsured subs": [
+    "no COIs",
+    "uninsured subcontractors"
+  ],
+  "Weak contracts": [
+    "no written contracts",
+    "no additional insured",
+    "no hold harmless",
+    "no AI/HH"
+  ],
+  "Wide radius operations": [
+    "multi-state",
+    "nationwide",
+    "250+ miles"
+  ],
+  "Work at heights": [
+    "over 3 stories",
+    "exterior"
+  ]
+}

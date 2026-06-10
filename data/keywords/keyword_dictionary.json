@@ -1,0 +1,42 @@
+{
+  "Environmental Liability": [
+    "asbestos", "mold remediation", "environmental contamination",
+    "hazardous waste", "pollution", "lead paint", "underground storage tank",
+    "superfund", "brownfield", "soil contamination", "groundwater contamination"
+  ],
+  "Prior Litigation": [
+    "prior litigation", "lawsuit", "legal action", "court judgment",
+    "settlement", "arbitration", "class action", "alleged negligence",
+    "prior claims", "litigation history", "sued", "plaintiff", "defendant"
+  ],
+  "Structural Defects": [
+    "foundation failure", "structural damage", "subsidence",
+    "sinkholes", "collapse risk", "load bearing failure",
+    "cracked foundation", "settling", "heaving", "earth movement"
+  ],
+  "Flood and Water Damage": [
+    "flood zone", "flood damage", "water intrusion", "storm surge",
+    "hurricane damage", "flood plain", "inundation", "water damage history",
+    "drainage issues", "waterlogged"
+  ],
+  "Fire and Explosion Risk": [
+    "fire damage", "explosion risk", "combustible materials",
+    "arson", "fire suppression failure", "flammable storage",
+    "previous fire", "fire code violation", "sprinkler failure"
+  ],
+  "Financial Distress": [
+    "bankruptcy", "insolvency", "foreclosure", "receivership",
+    "default", "creditor claims", "financial distress", "debt restructuring",
+    "chapter 11", "chapter 7", "liquidation"
+  ],
+  "Regulatory and Compliance": [
+    "regulatory violation", "cease and desist", "OSHA violation",
+    "EPA citation", "permit violation", "code violation",
+    "non-compliant", "enforcement action", "license revoked", "fines imposed"
+  ],
+  "Occupancy and Operations": [
+    "vacant building", "abandoned property", "unauthorized occupancy",
+    "illegal use", "change of use", "high risk operations",
+    "explosive storage", "chemical storage", "nightclub", "cannabis"
+  ]
+}
