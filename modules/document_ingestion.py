@@ -373,3 +373,48 @@ def _guess_section(text: str) -> str:
         if any(kw in lower for kw in keywords):
             return section
     return "body"
+
+
+# ── Context stitcher (for UI display) ─────────────────────────────────────────
+
+def get_context_for_display(ingested_doc: "IngestedDocument",
+                             chunk_index: int,
+                             keyword: str,
+                             window: int = 1) -> str:
+    """
+    Given a chunk_index and keyword, return a display string that:
+    1. Includes the chunk where the keyword was found
+    2. Adds up to `window` chunks before and after for context
+    3. Highlights (marks with →) the sentence containing the keyword
+
+    This fixes the UI problem where chunk_text was shown but the keyword
+    wasn't visible — because the chunk was a paragraph that referenced
+    a term normalized from a different surface form, or the keyword
+    appeared at the very start/end of the paragraph.
+    """
+    chunks = ingested_doc.chunks
+    if not chunks or chunk_index >= len(chunks):
+        return ""
+
+    # Gather window
+    start = max(0, chunk_index - window)
+    end = min(len(chunks), chunk_index + window + 1)
+    context_chunks = chunks[start:end]
+
+    combined = " ".join(c.text for c in context_chunks)
+
+    # Try to mark the sentence containing the keyword
+    if keyword:
+        kw_lower = keyword.lower()
+        sentences = re.split(r'(?<=[.!?])\s+', combined)
+        marked = []
+        found = False
+        for sent in sentences:
+            if not found and kw_lower in sent.lower():
+                marked.append(f"→ {sent}")
+                found = True
+            else:
+                marked.append(sent)
+        combined = " ".join(marked)
+
+    return combined.strip()

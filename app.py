@@ -397,16 +397,94 @@ with st.sidebar:
     st.markdown('<hr style="border-color:#334d6e;margin:8px 0"/>', unsafe_allow_html=True)
 
     st.markdown('<p style="color:#93c5fd;font-size:0.82rem;font-weight:600;letter-spacing:0.05em;margin:8px 0 6px 0">🤖 LLM PROVIDER</p>', unsafe_allow_html=True)
-    llm_provider = st.radio("Provider", ["groq","openai"], horizontal=True,
-                             label_visibility="collapsed")
-    if llm_provider == "groq":
+
+    # Azure OpenAI is shown as recommended if already configured in env
+    _az_preconfigured = bool(settings.azure_openai_endpoint and settings.azure_openai_api_key)
+    _default_provider = "azure_openai" if _az_preconfigured else "groq"
+
+    llm_provider = st.radio(
+        "Provider",
+        ["azure_openai", "groq", "openai"],
+        format_func=lambda x: {
+            "azure_openai": "☁️ Azure OpenAI",
+            "groq":         "⚡ Groq",
+            "openai":       "🟢 OpenAI",
+        }[x],
+        index=["azure_openai","groq","openai"].index(_default_provider),
+        label_visibility="collapsed",
+    )
+
+    if llm_provider == "azure_openai":
+        # Show Azure config — pre-filled from env if available
+        az_ep = st.text_input(
+            "Azure OpenAI Endpoint",
+            value=settings.azure_openai_endpoint,
+            placeholder="https://aifoundryjun2026.cognitiveservices.azure.com/",
+        )
+        if az_ep: settings.azure_openai_endpoint = az_ep
+
+        az_key = st.text_input(
+            "Azure OpenAI API Key",
+            value=settings.azure_openai_api_key,
+            type="password",
+            help="Settings → Keys in Azure AI Foundry portal",
+        )
+        if az_key: settings.azure_openai_api_key = az_key
+
+        # Show both deployments
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown(
+                f'<p style="color:#7dd3fc;font-size:0.75rem;margin:2px 0">LLM<br>'
+                f'<code style="background:#0f2744;color:#67e8f9;padding:1px 5px;border-radius:3px">'
+                f'{settings.azure_openai_chat_deployment}</code></p>',
+                unsafe_allow_html=True,
+            )
+        with col_b:
+            st.markdown(
+                f'<p style="color:#7dd3fc;font-size:0.75rem;margin:2px 0">Embeddings<br>'
+                f'<code style="background:#0f2744;color:#67e8f9;padding:1px 5px;border-radius:3px">'
+                f'{settings.azure_openai_embedding_deployment}</code></p>',
+                unsafe_allow_html=True,
+            )
+
+        # Live connection check
+        if az_ep and az_key:
+            st.markdown(
+                '<p style="color:#4ade80;font-size:0.75rem;margin:4px 0">✅ Azure OpenAI configured</p>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<p style="color:#fbbf24;font-size:0.75rem;margin:4px 0">'
+                '⚠️ Add endpoint + key above, or set in .env file</p>',
+                unsafe_allow_html=True,
+            )
+
+    elif llm_provider == "groq":
         k = st.text_input("Groq API Key", value=settings.groq_api_key, type="password")
         if k: settings.groq_api_key = k
-        st.markdown(f'<p style="color:#7dd3fc;font-size:0.78rem;margin:2px 0 0 0">Model: <code style="background:#0f2744;color:#67e8f9;padding:1px 5px;border-radius:3px">{settings.groq_model}</code></p>', unsafe_allow_html=True)
-    else:
+        st.markdown(
+            f'<p style="color:#7dd3fc;font-size:0.78rem;margin:2px 0 0 0">Model: '
+            f'<code style="background:#0f2744;color:#67e8f9;padding:1px 5px;border-radius:3px">'
+            f'{settings.groq_model}</code></p>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<p style="color:#94a3b8;font-size:0.73rem;margin:2px 0">'
+            'Note: embeddings still use local sentence-transformers when Azure is not set</p>',
+            unsafe_allow_html=True,
+        )
+
+    else:  # openai
         k = st.text_input("OpenAI API Key", value=settings.openai_api_key, type="password")
         if k: settings.openai_api_key = k
-        st.markdown(f'<p style="color:#7dd3fc;font-size:0.78rem;margin:2px 0 0 0">Model: <code style="background:#0f2744;color:#67e8f9;padding:1px 5px;border-radius:3px">{settings.openai_model}</code></p>', unsafe_allow_html=True)
+        st.markdown(
+            f'<p style="color:#7dd3fc;font-size:0.78rem;margin:2px 0 0 0">Model: '
+            f'<code style="background:#0f2744;color:#67e8f9;padding:1px 5px;border-radius:3px">'
+            f'{settings.openai_model}</code></p>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown('<hr style="border-color:#334d6e;margin:12px 0"/>', unsafe_allow_html=True)
     st.markdown('<p style="color:#93c5fd;font-size:0.82rem;font-weight:600;letter-spacing:0.05em;margin:0 0 6px 0">📖 KEYWORD DICTIONARY</p>', unsafe_allow_html=True)
@@ -440,7 +518,7 @@ with st.sidebar:
     st.markdown('<hr style="border-color:#334d6e;margin:12px 0"/>', unsafe_allow_html=True)
     st.markdown('<p style="color:#93c5fd;font-size:0.82rem;font-weight:600;letter-spacing:0.05em;margin:0 0 6px 0">⚙️ ANALYSIS SETTINGS</p>', unsafe_allow_html=True)
     run_llm = st.toggle("Enable LLM interpretation", value=True,
-                         help="Sends medium/low confidence matches to Groq or OpenAI for context validation")
+                         help="Sends medium/low confidence matches to the configured LLM (Azure OpenAI GPT-5.4-hamilton, Groq, or OpenAI) for context validation")
     sem_thresh = st.slider("Semantic similarity threshold", 0.50, 0.95,
                             settings.semantic_similarity_threshold, 0.01,
                             help="Minimum cosine similarity for semantic matches. Lower = more matches, more noise.")
@@ -449,34 +527,217 @@ with st.sidebar:
     st.markdown(f'<p style="color:#94a3b8;font-size:0.77rem;margin:2px 0 0 0">At {sem_thresh:.2f}: {thresh_label}</p>', unsafe_allow_html=True)
 
     st.markdown('<hr style="border-color:#334d6e;margin:12px 0"/>', unsafe_allow_html=True)
-    st.markdown('<p style="color:#93c5fd;font-size:0.82rem;font-weight:600;letter-spacing:0.05em;margin:0 0 6px 0">🗃️ SYSTEM STATUS</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#93c5fd;font-size:0.82rem;font-weight:600;letter-spacing:0.05em;margin:0 0 8px 0">🔬 SYSTEM DIAGNOSTICS</p>', unsafe_allow_html=True)
 
-    try:
-        import chromadb
-        client = chromadb.PersistentClient(path=settings.vectordb_path)
-        names  = [c.name for c in client.list_collections()]
-        if "keyword_categories" in names:
-            col = client.get_collection("keyword_categories")
-            st.success(f"**ChromaDB** ✅\n\n{col.count()} keyword vectors stored")
+    # ── Helper to render a status row ─────────────────────────────────────────
+    def _status_row(label: str, status: str, detail: str = "", color: str = None):
+        """Render one diagnostic row with icon + label + detail."""
+        icons   = {"ok": "✅", "warn": "⚠️", "error": "❌", "info": "ℹ️", "loading": "⏳"}
+        colors  = {"ok": "#4ade80", "warn": "#fbbf24", "error": "#f87171",
+                   "info": "#7dd3fc", "loading": "#94a3b8"}
+        icon    = icons.get(status, "•")
+        color   = color or colors.get(status, "#e2e8f0")
+        st.markdown(
+            f'<div style="margin:3px 0;padding:5px 8px;background:rgba(255,255,255,0.05);'
+            f'border-radius:5px;border-left:3px solid {color}">'
+            f'<span style="font-size:0.78rem;color:{color};font-weight:600">'
+            f'{icon} {label}</span>'
+            + (f'<br><span style="font-size:0.72rem;color:#94a3b8">{detail}</span>' if detail else "")
+            + '</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── 1. Azure endpoint reachability ────────────────────────────────────────
+    _az_ep  = settings.azure_openai_endpoint
+    _az_key = settings.azure_openai_api_key
+
+    if not _az_ep or not _az_key:
+        _status_row("Azure endpoint", "warn",
+                    "Endpoint or key not set — enter above or add to .env")
+    else:
+        # Quick TCP/HTTP reachability check (no auth needed — just check hostname resolves)
+        try:
+            import httpx
+            _probe = httpx.get(_az_ep.rstrip("/"), timeout=4,
+                               follow_redirects=False)
+            # Any HTTP response (even 401/403) means the host is reachable
+            _status_row("Azure endpoint reachable", "ok",
+                        f"{_az_ep[:45]}…")
+        except Exception as _e:
+            _status_row("Azure endpoint unreachable", "error",
+                        f"{type(_e).__name__}: {str(_e)[:60]}")
+
+    # ── 2. Azure embedding model connectivity ─────────────────────────────────
+    if _az_ep and _az_key:
+        if "azure_diag_embed" not in st.session_state:
+            st.session_state["azure_diag_embed"] = None   # not tested yet
+
+        _test_embed = st.button("🧪 Test embedding connection",
+                                use_container_width=True,
+                                key="btn_test_embed")
+        if _test_embed:
+            with st.spinner("Testing text-embedding-3-small…"):
+                try:
+                    from openai import AzureOpenAI as _AzOAI
+                    _tc = _AzOAI(
+                        api_version=settings.azure_openai_api_version,
+                        azure_endpoint=_az_ep,
+                        api_key=_az_key,
+                    )
+                    _resp = _tc.embeddings.create(
+                        input=["insurance submission test"],
+                        model=settings.azure_openai_embedding_deployment,
+                    )
+                    _dims = len(_resp.data[0].embedding)
+                    st.session_state["azure_diag_embed"] = {
+                        "ok": True,
+                        "dims": _dims,
+                        "model": settings.azure_openai_embedding_deployment,
+                    }
+                except Exception as _e:
+                    st.session_state["azure_diag_embed"] = {
+                        "ok": False,
+                        "error": str(_e)[:120],
+                    }
+
+        _emb_result = st.session_state.get("azure_diag_embed")
+        if _emb_result is None:
+            _status_row("Embedding model", "info",
+                        f"Click 'Test' to verify {settings.azure_openai_embedding_deployment}")
+        elif _emb_result["ok"]:
+            _status_row("Embedding model", "ok",
+                        f"{_emb_result['model']} · {_emb_result['dims']} dims · connection OK")
         else:
-            st.warning("ChromaDB empty")
-    except Exception as e:
-        st.error(f"ChromaDB: {e}")
+            _status_row("Embedding model", "error",
+                        _emb_result["error"])
 
+    # ── 3. Azure LLM connectivity ──────────────────────────────────────────────
+    if _az_ep and _az_key:
+        if "azure_diag_llm" not in st.session_state:
+            st.session_state["azure_diag_llm"] = None
+
+        _test_llm = st.button("🧪 Test LLM connection",
+                               use_container_width=True,
+                               key="btn_test_llm")
+        if _test_llm:
+            with st.spinner(f"Testing {settings.azure_openai_chat_deployment}…"):
+                try:
+                    from openai import AzureOpenAI as _AzOAI
+                    _tc = _AzOAI(
+                        api_version=settings.azure_openai_api_version,
+                        azure_endpoint=_az_ep,
+                        api_key=_az_key,
+                    )
+                    _resp = _tc.chat.completions.create(
+                        messages=[
+                            {"role": "system", "content": "Reply with OK only."},
+                            {"role": "user",   "content": "ping"},
+                        ],
+                        model=settings.azure_openai_chat_deployment,
+                        max_completion_tokens=5,
+                        temperature=0,
+                    )
+                    _reply = _resp.choices[0].message.content.strip()
+                    st.session_state["azure_diag_llm"] = {
+                        "ok": True,
+                        "reply": _reply,
+                        "model": settings.azure_openai_chat_deployment,
+                    }
+                except Exception as _e:
+                    st.session_state["azure_diag_llm"] = {
+                        "ok": False,
+                        "error": str(_e)[:120],
+                    }
+
+        _llm_result = st.session_state.get("azure_diag_llm")
+        if _llm_result is None:
+            _status_row("LLM model", "info",
+                        f"Click 'Test' to verify {settings.azure_openai_chat_deployment}")
+        elif _llm_result["ok"]:
+            _status_row("LLM model", "ok",
+                        f"{_llm_result['model']} · replied: \"{_llm_result['reply']}\"")
+        else:
+            _status_row("LLM model", "error", _llm_result["error"])
+
+    # ── 4. Vector store (ChromaDB) status ─────────────────────────────────────
+    try:
+        import chromadb as _chromadb
+        _chroma  = _chromadb.PersistentClient(path=settings.vectordb_path)
+        _names   = [c.name for c in _chroma.list_collections()]
+        _col_v2  = "keyword_categories_v2"
+
+        if _col_v2 in _names:
+            _col     = _chroma.get_collection(_col_v2)
+            _count   = _col.count()
+            _emb_src = _col.metadata.get("embedder", "unknown")
+            _d_hash  = _col.metadata.get("dict_hash", "?")[:8]
+
+            if _count == 0:
+                _status_row("Vector store", "error",
+                            "Collection exists but has 0 vectors — embedding failed on last build")
+            elif "Azure" in _emb_src:
+                _status_row("Vector store", "ok",
+                            f"{_count} vectors · Azure text-embedding-3-small · dict {_d_hash}")
+            else:
+                _status_row("Vector store", "warn",
+                            f"{_count} vectors · Local MiniLM fallback (Azure not available) · dict {_d_hash}")
+        elif "keyword_categories" in _names:
+            _status_row("Vector store", "warn",
+                        "Old v1 collection found — will rebuild on first analysis run")
+        else:
+            _status_row("Vector store", "info",
+                        "Empty — will build automatically on first analysis")
+    except Exception as _e:
+        _status_row("Vector store", "error", str(_e)[:80])
+
+    # ── 5. Active embedding model in use ──────────────────────────────────────
+    # Show clearly which model is actually being used right now
+    _emb_active = "Not determined"
+    _emb_status = "info"
+    _pipeline_loaded = any(k.startswith("pipeline_") for k in st.session_state)
+
+    if _pipeline_loaded:
+        # Check what the loaded pipeline's semantic matcher is using
+        _pipeline_obj = next(
+            (v for k, v in st.session_state.items() if k.startswith("pipeline_")), None
+        )
+        if _pipeline_obj and hasattr(_pipeline_obj, "semantic_matcher"):
+            _sm = _pipeline_obj.semantic_matcher
+            if hasattr(_sm, "_embedder") and _sm._embedder:
+                _emb_type = type(_sm._embedder).__name__
+                if _emb_type == "_AzureEmbedder":
+                    _emb_active = f"Azure text-embedding-3-small"
+                    _emb_status = "ok"
+                elif _emb_type == "_LocalEmbedder":
+                    _emb_active = "Local MiniLM-L6-v2 (Azure fallback)"
+                    _emb_status = "warn"
+            else:
+                _emb_active = "Embedder not initialized"
+                _emb_status = "error"
+    else:
+        _emb_active = "Pipeline not loaded yet"
+        _emb_status = "info"
+
+    _status_row("Active embedder", _emb_status, _emb_active)
+
+    # ── 6. Documents DB ────────────────────────────────────────────────────────
     stats = get_db_stats()
     if stats["total"] > 0:
-        st.success(f"**Documents DB** ✅\n\n{stats['total']} runs · 🔴{stats['high_risk']} 🟡{stats['medium_risk']} 🟢{stats['low_risk']}")
+        _status_row("Documents DB", "ok",
+                    f"{stats['total']} runs · 🔴{stats['high_risk']} 🟡{stats['medium_risk']} 🟢{stats['low_risk']}")
     else:
-        st.info("**Documents DB** — empty")
+        _status_row("Documents DB", "info", "Empty — no runs yet")
 
-    # Show which pipeline is currently loaded
-    import hashlib
-    active_hash = hashlib.md5(json.dumps(keywords_dict, sort_keys=True).encode()).hexdigest()[:12]
+    # ── 7. Pipeline load status ────────────────────────────────────────────────
+    import hashlib as _hl
+    active_hash = _hl.md5(json.dumps(keywords_dict, sort_keys=True).encode()).hexdigest()[:12]
     pipeline_key = f"pipeline_{active_hash}_{llm_provider}"
     if pipeline_key in st.session_state:
-        st.markdown(f'<p style="color:#4ade80;font-size:0.77rem;margin:4px 0 0 0">✅ Pipeline loaded · dict <code style="background:#0f2744;color:#67e8f9;padding:1px 4px;border-radius:2px">{active_hash}</code></p>', unsafe_allow_html=True)
+        _status_row("Pipeline", "ok",
+                    f"Loaded · dict {active_hash} · provider {llm_provider}")
     else:
-        st.markdown(f'<p style="color:#fbbf24;font-size:0.77rem;margin:4px 0 0 0">⏳ Pipeline not yet initialized · will load on first analysis</p>', unsafe_allow_html=True)
+        _status_row("Pipeline", "info",
+                    "Not loaded — will initialize on first analysis")
 
 
 # ════════════════════════════════════════════════════════════
@@ -558,14 +819,20 @@ with tab1:
             ptext = st.empty()
             pstep = st.empty()
 
+            _provider_label = {
+                "azure_openai": "Azure OpenAI gpt-5.4-hamilton",
+                "groq":  f"Groq {settings.groq_model}",
+                "openai": f"OpenAI {settings.openai_model}",
+            }.get(llm_provider, llm_provider.upper())
+
             STEP_SHORT = {
                 1: "Parsing document into structured chunks...",
                 2: "Running Aho-Corasick exact keyword scan...",
-                3: "Computing semantic embeddings and querying ChromaDB...",
+                3: "Computing semantic embeddings via Azure text-embedding-3-small...",
                 4: "Scanning for negation patterns (no/not/never/without)...",
                 5: "Adjusting confidence by document section...",
                 6: "Computing cross-category co-occurrence risk score...",
-                7: f"Sending ambiguous matches to {llm_provider.upper()} for context validation...",
+                7: f"Sending ambiguous matches to {_provider_label} for context validation...",
                 8: "Writing audit record and saving to documents database...",
             }
 

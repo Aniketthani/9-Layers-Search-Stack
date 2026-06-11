@@ -108,16 +108,38 @@ class AnalysisPipeline:
             step_results.append(StepResult(2, "Exact Matching", "error", str(e)))
 
         # Step 3: Semantic matching
+        # Semantic runs on ALL chunks independently of exact matching.
+        # It looks for categories NOT yet found by exact matching — paraphrased
+        # language, synonyms, implied risk. Deduplication happens at results level:
+        # if a category was already found by exact matching in the same chunk,
+        # the semantic match for that category/chunk is dropped as redundant.
+        # But if semantic finds a DIFFERENT category or a DIFFERENT chunk, it is kept.
         if progress_cb: progress_cb(3, "Semantic similarity matching")
         try:
-            semantic_matches = self.semantic_matcher.match_document(ingested)
+            semantic_matches_raw = self.semantic_matcher.match_document(ingested)
+
+            # Deduplicate: drop semantic matches where exact already found
+            # the same (category, chunk_index) — keep all others
+            exact_cat_chunks = set(
+                (m.category, m.chunk_index) for m in exact_matches
+            )
+            semantic_matches = [
+                m for m in semantic_matches_raw
+                if (m.category, m.chunk_index) not in exact_cat_chunks
+            ]
+
             vstats = self.semantic_matcher.get_collection_stats()
             step_results.append(StepResult(3, "Semantic Matching", "ok",
-                f"{len(semantic_matches)} semantic matches found",
+                f"{len(semantic_matches)} semantic matches found "
+                f"({len(semantic_matches_raw)} raw, "
+                f"{len(semantic_matches_raw) - len(semantic_matches)} deduplicated against exact)",
                 {"match_count": len(semantic_matches),
+                 "raw_count": len(semantic_matches_raw),
+                 "deduped": len(semantic_matches_raw) - len(semantic_matches),
                  "vectordb_vectors": vstats.get("total_vectors", 0),
                  "vectordb_path": vstats.get("vectordb_path", ""),
                  "dict_hash": vstats.get("dict_hash", ""),
+                 "embedder": vstats.get("embedder", "unknown"),
                  "sample": [{"cat": m.category, "kw": m.matched_keyword,
                               "score": m.similarity_score} for m in semantic_matches[:8]]}))
         except Exception as e:
