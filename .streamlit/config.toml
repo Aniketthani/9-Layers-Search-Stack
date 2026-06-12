@@ -3,6 +3,12 @@ headless = true
 enableCORS = false
 enableXsrfProtection = false
 maxUploadSize = 200
+maxMessageSize = 200
 
 [browser]
 gatherUsageStats = false
+
+[runner]
+# Prevents Streamlit rerunning the whole script when a widget
+# inside a cached function changes — reduces unnecessary re-renders
+fastReruns = true
