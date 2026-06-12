@@ -40,7 +40,7 @@ class Settings(BaseModel):
     # ── Matching config ───────────────────────────────────────────────────
     # Raised from 0.72 — text-embedding-3-small scores differently to MiniLM
     # 0.75 gives better precision with the new model
-    semantic_similarity_threshold:    float = 0.75
+    semantic_similarity_threshold:    float = 0.80
     negation_window_tokens:           int   = 6
     cooccurrence_window_paragraphs:   int   = 3
 

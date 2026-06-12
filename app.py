@@ -3,6 +3,10 @@ app.py — Adverse Keyword Search v5
 Full pipeline explainability, themed UI, writeups per step
 """
 import os, json, tempfile, re
+# Disable ChromaDB telemetry before it is imported anywhere —
+# its background thread causes WebSocketClosedError in Streamlit/Tornado
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+os.environ["CHROMA_TELEMETRY"]     = "False"
 import pandas as pd
 import streamlit as st
 from pathlib import Path
@@ -662,7 +666,11 @@ with st.sidebar:
     # ── 4. Vector store (ChromaDB) status ─────────────────────────────────────
     try:
         import chromadb as _chromadb
-        _chroma  = _chromadb.PersistentClient(path=settings.vectordb_path)
+        from chromadb.config import Settings as _ChromaSettings
+        _chroma  = _chromadb.PersistentClient(
+            path=settings.vectordb_path,
+            settings=_ChromaSettings(anonymized_telemetry=False, allow_reset=True),
+        )
         _names   = [c.name for c in _chroma.list_collections()]
         _col_v2  = "keyword_categories_v2"
 
@@ -766,59 +774,54 @@ with tab1:
     col_l, col_r = st.columns([3, 2])
 
     with col_l:
-        st.markdown('<div class="sec-hdr">Upload Submission Document</div>', unsafe_allow_html=True)
-        st.caption("Supported: PDF · DOCX · XLSX · EML · MSG · HTML (ACORD) · TXT")
-        uploaded = st.file_uploader("Document", label_visibility="collapsed",
-                                     type=["pdf","docx","xlsx","xls","msg","eml","html","htm","xml","txt"])
+        st.markdown('<div class="sec-hdr">Upload Submission Documents</div>', unsafe_allow_html=True)
+        st.caption("Supported: PDF · DOCX · XLSX · EML · MSG · HTML (ACORD) · TXT · Multiple files")
+        uploaded_files = st.file_uploader(
+            "Documents", label_visibility="collapsed",
+            type=["pdf","docx","xlsx","xls","msg","eml","html","htm","xml","txt"],
+            accept_multiple_files=True,
+        )
 
     with col_r:
         st.markdown('<div class="sec-hdr">What the pipeline checks</div>', unsafe_allow_html=True)
         for cat, kws in keywords_dict.items():
             st.markdown(f"**{cat}** — {len(kws)} keywords")
 
-    # Pipeline overview explainer
     with st.expander("ℹ️ How the analysis pipeline works", expanded=False):
         st.markdown("""
-        This system runs every uploaded document through **8 sequential steps**. Each step builds
-        on the previous one, and together they produce results that are more accurate, explainable,
-        and actionable than any single matching approach could achieve on its own.
-
         | Step | Name | Purpose |
         |------|------|---------|
-        | 1 | Document Ingestion | Parse file into chunks with page/section metadata |
-        | 2 | Exact Matching | Aho-Corasick keyword scan — deterministic, High confidence |
-        | 3 | Semantic Matching | Embedding similarity — catches synonyms and paraphrases |
-        | 4 | Negation Detection | Tag matches as affirmed vs denied ("no prior litigation") |
-        | 5 | Section Weighting | Demote boilerplate matches, promote risk-section matches |
-        | 6 | Co-occurrence Scoring | Detect high-risk category combinations |
-        | 7 | LLM Interpretation | Natural-language explanation of ambiguous matches |
-        | 8 | Audit & Storage | Permanent record of this run for traceability |
-
-        Switch to the **Pipeline Steps** tab after analysis to see exactly what happened at each step.
+        | 1 | Document Ingestion | Parse into chunks — ACORD boilerplate filtered out |
+        | 2 | Exact Matching | Aho-Corasick keyword scan — High confidence |
+        | 3 | Semantic Matching | Embedding similarity — catches synonyms |
+        | 4 | Negation Detection | Affirmed vs denied |
+        | 5 | Section Weighting | Boost risk-section, reduce table-label matches |
+        | 6 | Co-occurrence Scoring | 1 cat=10%, 2 cats=20%, 3+ cats=40% base weight |
+        | 7 | LLM Interpretation | Context validation of ambiguous matches |
+        | 8 | Audit & Storage | Permanent record |
         """)
 
-    if uploaded:
+    if uploaded_files:
         st.divider()
-        c1, c2, c3 = st.columns([4, 1, 1])
-        with c1: st.info(f"📄 **{uploaded.name}** — {round(uploaded.size/1024, 1)} KB")
-        with c2: run_btn = st.button("▶ Analyze", type="primary", use_container_width=True)
-        with c3:
-            if st.button("🗑 Clear", use_container_width=True):
+        total_kb = sum(f.size for f in uploaded_files) / 1024
+        st.markdown(
+            f'<div class="callout-info">📂 <b>{len(uploaded_files)} file(s) ready</b>'
+            f' — {total_kb:.1f} KB total</div>',
+            unsafe_allow_html=True
+        )
+        for uf in uploaded_files:
+            st.caption(f"  · {uf.name}  ({round(uf.size/1024,1)} KB)")
+
+        c_run, c_clr = st.columns([1, 1])
+        with c_run:
+            run_btn = st.button("▶ Analyze All", type="primary", use_container_width=True)
+        with c_clr:
+            if st.button("🗑 Clear results", use_container_width=True):
                 st.session_state.pop("result", None)
+                st.session_state.pop("multi_results", None)
                 st.rerun()
 
         if run_btn:
-            file_bytes = uploaded.read()
-            suffix = Path(uploaded.name).suffix
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(file_bytes)
-                tmp_path = tmp.name
-
-            # Live step progress
-            pbar  = st.progress(0)
-            ptext = st.empty()
-            pstep = st.empty()
-
             _provider_label = {
                 "azure_openai": "Azure OpenAI gpt-5.4-hamilton",
                 "groq":  f"Groq {settings.groq_model}",
@@ -826,71 +829,146 @@ with tab1:
             }.get(llm_provider, llm_provider.upper())
 
             STEP_SHORT = {
-                1: "Parsing document into structured chunks...",
+                1: "Parsing document — filtering ACORD boilerplate...",
                 2: "Running Aho-Corasick exact keyword scan...",
-                3: "Computing semantic embeddings via Azure text-embedding-3-small...",
-                4: "Scanning for negation patterns (no/not/never/without)...",
-                5: "Adjusting confidence by document section...",
-                6: "Computing cross-category co-occurrence risk score...",
-                7: f"Sending ambiguous matches to {_provider_label} for context validation...",
-                8: "Writing audit record and saving to documents database...",
+                3: "Computing semantic embeddings...",
+                4: "Scanning for negation patterns...",
+                5: "Adjusting confidence by section and source quality...",
+                6: "Computing co-occurrence risk score (1 cat=10%, 2=20%, 3+=40%)...",
+                7: f"LLM context validation ({_provider_label})...",
+                8: "Writing audit record...",
             }
 
-            def pcb(step, name):
-                pbar.progress(step / 8)
-                ptext.markdown(f"⏳ **Step {step}/8 — {name}**")
-                pstep.markdown(f"<div class='callout-info'>{STEP_SHORT.get(step,'')}</div>",
-                               unsafe_allow_html=True)
+            pipeline = get_pipeline(keywords_dict, llm_provider)
+            all_run_results = []
 
-            with st.spinner(""):
-                pipeline = get_pipeline(keywords_dict, llm_provider)
-                result   = pipeline.run(tmp_path, run_llm=run_llm, progress_cb=pcb, file_bytes=file_bytes)
+            for f_idx, uploaded in enumerate(uploaded_files):
+                st.markdown(f"**Analyzing {f_idx+1}/{len(uploaded_files)}: {uploaded.name}**")
+                pbar  = st.progress(0)
+                ptext = st.empty()
+                pstep = st.empty()
 
-            pbar.progress(1.0)
-            ptext.markdown("✅ **Analysis complete!**")
-            pstep.empty()
-            os.unlink(tmp_path)
-            st.session_state["result"] = result
+                def pcb(step, name, _pb=pbar, _pt=ptext, _ps=pstep):
+                    try:
+                        _pb.progress(step / 8)
+                        _pt.markdown(f"⏳ **Step {step}/8 — {name}**")
+                        _ps.markdown(
+                            f"<div class='callout-info'>{STEP_SHORT.get(step,'')}</div>",
+                            unsafe_allow_html=True
+                        )
+                    except Exception:
+                        pass
 
-            # Risk banner
-            cooc = result.cooccurrence
-            risk = cooc.document_risk_score
-            cls  = RISK_CLS.get(risk, "risk-low")
-            col  = RISK_COLOR.get(risk, "#166534")
-            ico  = RISK_ICON.get(risk, "")
-            st.markdown(f"""
-            <div class="{cls}">
-              <div style="font-size:1.4rem;font-weight:800;color:{col}">{ico} {risk} Risk Document</div>
-              <div style="color:{col}aa;margin-top:4px">{cooc.notes}</div>
-            </div>""", unsafe_allow_html=True)
-            st.markdown("")
+                file_bytes = uploaded.read()
+                suffix = Path(uploaded.name).suffix
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp.write(file_bytes)
+                    tmp_path = tmp.name
 
-            # Metrics
-            m1,m2,m3,m4,m5,m6 = st.columns(6)
-            m1.metric("Total Matches",   len(result.all_matches))
-            m2.metric("🔴 High",         sum(1 for m in result.all_matches if m.confidence=="High"))
-            m3.metric("🟡 Medium",       sum(1 for m in result.all_matches if m.confidence=="Medium"))
-            m4.metric("🟠 Low",          sum(1 for m in result.all_matches if m.confidence=="Low"))
-            m5.metric("✅ Negated",      sum(1 for m in result.all_matches if getattr(m,"negation_flag",False)))
-            m6.metric("Run ID",          result.run_id)
+                with st.spinner(""):
+                    result = pipeline.run(
+                        tmp_path, run_llm=run_llm, progress_cb=pcb, file_bytes=file_bytes
+                    )
 
-            if cooc.triggered_categories:
-                chips = " ".join([f'<span class="chip">{c}</span>' for c in cooc.triggered_categories])
-                st.markdown(f"**Triggered categories:** {chips}", unsafe_allow_html=True)
+                try:
+                    pbar.progress(1.0)
+                    ptext.markdown(f"✅ **{uploaded.name} — complete!**")
+                    pstep.empty()
+                except Exception:
+                    pass
+                os.unlink(tmp_path)
+                all_run_results.append(result)
 
-            if cooc.high_risk_combos_found:
-                for c1x,c2x,w in cooc.high_risk_combos_found:
-                    st.warning(f"⚡ High-risk combination: **{c1x}** + **{c2x}** (combined weight {w})")
+            if len(all_run_results) == 1:
+                st.session_state["result"] = all_run_results[0]
+            else:
+                st.session_state["multi_results"] = all_run_results
+                st.session_state["result"] = all_run_results[-1]
 
-            if result.errors:
-                with st.expander("⚠️ Warnings"):
-                    for e in result.errors: st.warning(e)
+            st.markdown("---")
+            for r_idx, result in enumerate(all_run_results):
+                cooc   = result.cooccurrence
+                risk   = cooc.document_risk_score
+                cls    = RISK_CLS.get(risk, "risk-low")
+                col    = RISK_COLOR.get(risk, "#166534")
+                ico    = RISK_ICON.get(risk, "")
+                n_cats = len(cooc.triggered_categories)
+
+                if n_cats == 0:   wt_label = "0% — no adverse categories"
+                elif n_cats == 1: wt_label = "10% base risk weight (1 category)"
+                elif n_cats == 2: wt_label = "20% base risk weight (2 categories)"
+                else:             wt_label = f"40% base risk weight ({n_cats} categories)"
+
+                if len(all_run_results) > 1:
+                    st.markdown(
+                        f'<div style="background:#1e3a5f;color:white;border-radius:6px 6px 0 0;'
+                        f'padding:7px 14px;font-size:0.83rem;font-weight:600">'
+                        f'📄 {r_idx+1}/{len(all_run_results)}: {result.filename}</div>',
+                        unsafe_allow_html=True
+                    )
+
+                st.markdown(f"""
+                <div class="{cls}">
+                  <div style="font-size:1.2rem;font-weight:800;color:{col}">{ico} {risk} Risk &nbsp;·&nbsp; {result.filename}</div>
+                  <div style="color:{col}aa;font-size:0.85rem;margin-top:3px">{cooc.notes}</div>
+                  <div style="color:{col};font-size:0.85rem;margin-top:4px"><b>Risk weight: {wt_label}</b></div>
+                </div>""", unsafe_allow_html=True)
+
+                affirmed = [m for m in result.all_matches
+                            if not getattr(m,"negation_flag",False)
+                            and m.confidence != "Informational"]
+                negated  = sum(1 for m in result.all_matches if getattr(m,"negation_flag",False))
+                cat_counts = {}
+                for m in affirmed:
+                    c = getattr(m,"category","")
+                    if c: cat_counts[c] = cat_counts.get(c, 0) + 1
+
+                m1,m2,m3,m4,m5 = st.columns(5)
+                m1.metric("🚩 Findings",   len(affirmed))
+                m2.metric("⚠️ Categories", n_cats)
+                m3.metric("🔴 High",       sum(1 for m in result.all_matches if m.confidence=="High"))
+                m4.metric("✅ Denied",     negated)
+                m5.metric("Run",           result.run_id)
+
+                if cooc.triggered_categories:
+                    cat_rows = [
+                        {"Risk Category": cat, "Matches": cat_counts.get(cat, 0)}
+                        for cat in sorted(cooc.triggered_categories,
+                                          key=lambda c: cat_counts.get(c,0), reverse=True)
+                    ]
+                    st.dataframe(pd.DataFrame(cat_rows),
+                                 use_container_width=True, hide_index=True,
+                                 height=min(40 + len(cat_rows)*35, 320))
+
+                # Co-occurrence in expander ONLY — never inline st.warning
+                if cooc.high_risk_combos_found:
+                    with st.expander(
+                        f"⚡ {len(cooc.high_risk_combos_found)} high-risk category combinations",
+                        expanded=False,
+                    ):
+                        st.caption("Category pairs historically correlated with declined submissions.")
+                        for c1x, c2x, w in cooc.high_risk_combos_found:
+                            clr = "#991b1b" if w >= 0.90 else "#92400e"
+                            st.markdown(
+                                f'<div style="padding:4px 10px;margin:2px 0;'
+                                f'border-left:3px solid {clr};background:#fafafa;'
+                                f'border-radius:0 4px 4px 0;font-size:0.84rem">'
+                                f'<b style="color:{clr}">⚡ {c1x} + {c2x}</b>'
+                                f'<span style="float:right;color:{clr};font-weight:600">'
+                                f'weight {w:.2f}</span></div>',
+                                unsafe_allow_html=True
+                            )
+
+                if result.errors:
+                    with st.expander("⚠️ Warnings"):
+                        for e in result.errors: st.warning(e)
+
+                if len(all_run_results) > 1 and r_idx < len(all_run_results) - 1:
+                    st.markdown("")
 
             st.markdown("""<div class="callout-info">
-            → Switch to <b>Pipeline Steps</b> to see what happened at each stage,
-            or <b>Results</b> to explore the findings with full context paragraphs.
+            → Switch to <b>Pipeline Steps</b> or <b>Results</b> to explore findings.
             </div>""", unsafe_allow_html=True)
-
 
 # ════════════════════════════════════════════════════════════
 # TAB 2 — Pipeline Steps (with explainability)
@@ -1102,10 +1180,6 @@ with tab3:
                 freq = cooc.category_frequency.get(cat, 0)
                 cols[i%4].metric(cat, freq)
 
-        if cooc.high_risk_combos_found:
-            for c1x, c2x, w in cooc.high_risk_combos_found:
-                st.warning(f"⚡ **{c1x}** + **{c2x}** — combined risk weight: {w}")
-
         st.divider()
 
         # Confidence guide
@@ -1194,6 +1268,29 @@ with tab3:
             st.download_button("⬇️ Export full results CSV",
                 pd.DataFrame(rows_exp).to_csv(index=False),
                 f"results_{result.run_id}.csv", "text/csv")
+
+        # Co-occurrence at bottom — expander only, never inline
+        if cooc.high_risk_combos_found:
+            st.divider()
+            with st.expander(
+                f"⚡ {len(cooc.high_risk_combos_found)} high-risk category combinations",
+                expanded=False,
+            ):
+                st.caption(
+                    "These category pairs co-occur in this submission and are "
+                    "historically associated with elevated claims frequency."
+                )
+                for c1x, c2x, w in cooc.high_risk_combos_found:
+                    clr = "#991b1b" if w >= 0.90 else "#92400e"
+                    st.markdown(
+                        f'<div style="padding:5px 12px;margin:3px 0;'
+                        f'border-left:3px solid {clr};background:#fafafa;'
+                        f'border-radius:0 4px 4px 0;font-size:0.84rem">'
+                        f'<b style="color:{clr}">⚡ {c1x} + {c2x}</b>'
+                        f'<span style="float:right;color:{clr};font-weight:600">'
+                        f'combined weight: {w:.2f}</span></div>',
+                        unsafe_allow_html=True
+                    )
 
 
 # ════════════════════════════════════════════════════════════

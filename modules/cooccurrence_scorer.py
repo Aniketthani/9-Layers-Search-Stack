@@ -400,31 +400,40 @@ def compute_cooccurrence(matches: list, ingested_doc,
     high_risk_found.sort(key=lambda x: x[2], reverse=True)
 
     # Step 4: composite score
-    base_score   = min(len(triggered) * 0.08, 0.45)
-    combo_boost  = (high_risk_found[0][2] * 0.50) if high_risk_found else 0.0
-    all_domains  = set(d for c in triggered for d in domain_map.get(c, []))
-    diversity_bonus = 0.10 if len(all_domains) >= 3 else 0.0
-    raw_score    = min(base_score + combo_boost + diversity_bonus, 1.0)
+    # Risk tier: 1 category=10%, 2 categories=20%, 3+ categories=40%
+    n_cats = len(triggered)
+    if n_cats == 0:
+        category_tier_score = 0.0
+        tier_note = "No adverse categories detected"
+    elif n_cats == 1:
+        category_tier_score = 0.10
+        tier_note = "1 risk category → 10% base weight"
+    elif n_cats == 2:
+        category_tier_score = 0.20
+        tier_note = "2 risk categories → 20% base weight"
+    else:
+        category_tier_score = 0.40
+        tier_note = f"{n_cats} risk categories → 40% base weight"
 
-    if raw_score >= 0.65 or (high_risk_found and high_risk_found[0][2] >= 0.85):
+    combo_boost     = (high_risk_found[0][2] * 0.30) if high_risk_found else 0.0
+    all_domains     = set(d for c in triggered for d in domain_map.get(c, []))
+    diversity_bonus = 0.05 if len(all_domains) >= 3 else 0.0
+    raw_score       = min(category_tier_score + combo_boost + diversity_bonus, 1.0)
+
+    if raw_score >= 0.40 or (high_risk_found and high_risk_found[0][2] >= 0.85):
         label = "High"
-    elif raw_score >= 0.35 or len(triggered) >= 2:
+    elif raw_score >= 0.20 or n_cats >= 2:
         label = "Medium"
     else:
         label = "Low"
 
     # Notes
-    notes_parts = []
+    notes_parts = [tier_note]
     for c1, c2, w in high_risk_found[:3]:
-        d1 = "/".join(domain_map.get(c1, ["?"]))
-        d2 = "/".join(domain_map.get(c2, ["?"]))
-        notes_parts.append(f"{c1} [{d1}] + {c2} [{d2}] (weight {w:.2f})")
-    if not notes_parts:
+        notes_parts.append(f"{c1} + {c2} (weight {w:.2f})")
+    if len(notes_parts) == 1 and triggered:
         domains_str = ", ".join(sorted(all_domains)) or "unclassified"
-        notes_parts.append(
-            f"No high-risk combinations detected. Domains active: {domains_str}"
-            if triggered else "No adverse matches found"
-        )
+        notes_parts.append(f"Domains: {domains_str}")
 
     return CooccurrenceResult(
         document_risk_score=label,

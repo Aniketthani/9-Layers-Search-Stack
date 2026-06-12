@@ -248,23 +248,21 @@ class SemanticMatcher:
         dict_hash = _dict_hash(keywords_dict)
         self._keywords_dict = keywords_dict
 
-        # Try Azure embedder first; automatically fall back to local if it fails
+        # Try Azure embedder first; fall back to local if it fails
         try:
             self._embedder = _get_embedder()
-            # Smoke-test the embedder immediately with one short string
-            # so we fail fast here rather than silently mid-pipeline
-            self._embedder.embed_one("test")
             logger.info(f"Embedder ready: {type(self._embedder).__name__}")
         except Exception as e:
-            logger.warning(
-                f"Primary embedder ({type(self._embedder).__name__}) "
-                f"failed smoke test: {e}\n"
-                f"Falling back to local sentence-transformers."
-            )
+            logger.warning(f"Embedder init failed: {e} — falling back to local")
             self._embedder = _LocalEmbedder()
 
-        # Persistent ChromaDB
-        self.chroma_client = chromadb.PersistentClient(path=settings.vectordb_path)
+        # Persistent ChromaDB — telemetry disabled to prevent background
+        # threads from colliding with Streamlit's Tornado event loop
+        from chromadb.config import Settings as ChromaSettings
+        self.chroma_client = chromadb.PersistentClient(
+            path=settings.vectordb_path,
+            settings=ChromaSettings(anonymized_telemetry=False, allow_reset=True),
+        )
         collection_name = "keyword_categories_v2"
 
         existing_collections = [c.name for c in self.chroma_client.list_collections()]
@@ -368,16 +366,21 @@ class SemanticMatcher:
         Find categories semantically similar to this chunk.
 
         top_k=5: return up to 5 category matches per chunk.
-        Deduplication against exact matches happens in pipeline.py, not here.
-        This lets semantic find multiple categories per chunk when relevant.
+        Skips header/boilerplate chunks and requires more words for table rows.
         """
         if not self._initialized:
             return []
 
-        raw_text = chunk.text
+        # Skip structural chunks — they produce noisy semantic matches
+        quality = getattr(chunk, "source_quality", "rich") or "rich"
+        if quality in ("header", "boilerplate"):
+            return []
+        min_words = 12 if quality == "table_row" else 8
+
+        raw_text   = chunk.text
         normalized = normalize_text(raw_text, self._keywords_dict)
 
-        if len(normalized.split()) < 5:
+        if len(normalized.split()) < min_words:
             return []
 
         try:
@@ -408,10 +411,10 @@ class SemanticMatcher:
             category = meta["category"]
             keyword  = meta.get("keyword", category)
 
-            # Confidence tier
-            if similarity >= 0.85:
+            # Confidence tier — calibrated for text-embedding-3-small
+            if similarity >= 0.87:
                 confidence = "High"
-            elif similarity >= 0.78:
+            elif similarity >= 0.82:
                 confidence = "Medium"
             else:
                 confidence = "Low"
